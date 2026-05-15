@@ -1,5 +1,5 @@
 # SISOP-4-2026-IT-039
-## Laporan Resmi Modul 4 Sisop oleh Elisabeth L. S. S.| 039
+## Laporan Resmi Modul 4 Sisop oleh Elisabeth L. S. S. | 039
 ### Soal 1
 ### Penjelasan
 
