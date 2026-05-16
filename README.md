@@ -35,57 +35,62 @@ mkdir mnt
 ```
 #### b. Membuat program `kenz_rescue.c` yang menerima argumen `<source_directory>` dan `<mount_directory>`  
 ```
-#define FUSE_USE_VERSION 31
+int main(int argc, char *argv[]) {
+    ...
 
-#include <fuse.h>
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <sys/stat.h>
+    realpath(argv[1], source_dir);
 
-char source_dir[1024];
+    char *fuse_argv[2];
+    fuse_argv[0] = argv[0]; // ./kenz_rescue
+    fuse_argv[1] = argv[2]; // mnt
 
-// fungsi untuk baca 1.txt - 7.txt, cari line KOORD, gabungin fungsi generate_tujuan_content
-    char fragment[1024] = "";
-    char line[256];
-
-    // baca 1.txt - 7.txt
-    for (int i = 1; i <= 7; i++) {
-        char filepath[4096];
-        snprintf(filepath, sizeof(filepath), "%s/%d.txt", source_dir, i);
-
-        FILE *f = fopen(filepath, "r");
-        if (f) {
-            while (fgets(line, sizeof(line), f)) {
-                // cari line KOORD
-                if (strncmp(line, "KOORD: ", 7) == 0) {
-                    line[strcspn(line, "\r\n")] = 0;
-
-                    strncat(fragment, line + 7, sizeof(fragment) - strlen(fragment) - 1);
-                    break; // Lanjut ke file berikutnya
-                }
-            }
-            fclose(f);
-        }
-    }
-    snprintf(output_buffer, buf_size, "Tujuan Mas Amba: %s\n", fragment);
+    return fuse_main(2, fuse_argv, &xmp_oper, NULL);
 }
+```
+: `realpath(argv[1], source_dir);` untuk menangkap argumen pertama dari `amba_files` dan menjadikannya absolute path  
+: `char *fuse_argv[2]; ... fuse_argv[1] = argv[2];` untuk menyiapkan argumen fungsi **FUSE**  
+: `return fuse_main(2, fuse_argv, &xmp_oper, NULL);` untuk menjalankan **FUSE** di background
 
+##### Membuat Passthrough**
+```
+static int xmp_open(const char *path, struct fuse_file_info *fi) {
+    ...
 
-// FUSE
+    // part passthrough
+    char fpath[4096];
+    snprintf(fpath, sizeof(fpath), "%s%s", source_dir, path);
 
-// Getattr
+    int res = open(fpath, fi->flags);
+    if (res == -1) return -errno;
+
+    close(res);
+    return 0;
+}
+```
+: ` int res = open(fpath, fi->flags); ... close(res); return 0;` untuk meng-oper perintah ke linux  
+
+#### c. Saat `kenz_rescue.c` di-*mount*, ketujuh file `1.txt` sampai `7.txt` harus muncul mount directory sama persis dengan source  
+##### Fungsi `xmp_readdir`
+```
+static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler, ...) {
+    // kode passthrough ...
+
+    if (strcmp(path, "/") == 0) {
+        filler(buf, "tujuan.txt", NULL, 0, 0);
+    }
+
+    return 0;
+}
+```
+: `if (strcmp(path, "/") == 0) {
+        filler(buf, "tujuan.txt", NULL, 0, 0);
+    }` untuk memasukkan file `tujuan.txt` saat user melakukan `ls mnt/`
+
+##### Fungsi `xmp_getattr`
+```
 static int xmp_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi) {
-    (void) fi;
-    int res = 0;
-    memset(stbuf, 0, sizeof(struct stat));
-
-    // kalo file virtual
+    // ... 
+    
     if (strcmp(path, "/tujuan.txt") == 0) {
         stbuf->st_mode = S_IFREG | 0444;
         stbuf->st_nlink = 1;
@@ -98,73 +103,42 @@ static int xmp_getattr(const char *path, struct stat *stbuf, struct fuse_file_in
         stbuf->st_gid = getgid();
         return 0;
     }
+    
+    // kode passthrough...
+```
+: `char content[4096]; ... stbuf->st_size = strlen(content);` untuk menghitung size `tujuan.txt` dan mengirimnya ke Linux  
+: Bagian kode ini berfungsi untuk memberikan `stat` file `tujuan.txt` seolah-olah file itu bukan virtual
 
-    // kalo bukan file virtual -> passthrough
-    char fpath[4096];
-    snprintf(fpath, sizeof(fpath), "%s%s", source_dir, path);
-    res = lstat(fpath, stbuf);
-    if (res == -1) return -errno;
-
-    return 0;
+#### d. Setelah `./kenz_rescue.c amba_files mnt`, hasil `cat mnt/1.txt` sama dengan `cat amba_files/1.txt` 
+##### Fungsi `generate_tujuan_content` (`cat` atau `stat`)
+```
+void generate_tujuan_content(char *output_buffer, size_t buf_size) {
+    char fragment[1024] = "";
+    // ...
+    for (int i = 1; i <= 7; i++) {
+            while (fgets(line, sizeof(line), f)) {
+                if (strncmp(line, "KOORD: ", 7) == 0) {
+                    line[strcspn(line, "\r\n")] = 0; // Hapus enter
+                    strncat(fragment, line + 7, sizeof(fragment) - strlen(fragment) - 1);
+                    break; 
+                }
+            }
+    }
+    snprintf(output_buffer, buf_size, "Tujuan Mas Amba: %s\n", fragment);
 }
+```
+: `for (int i = 1; i <= 7; i++) { ... line[strcspn(line, "\r\n")] = 0;` sebagai looping membuka `1.txt` sampai `7.txt`, mencari kalimat **"KOORD: "**, dan menghilangkan enter  
+: `strncat(fragment, line + 7, sizeof(fragment) - strlen(fragment) - 1); break;` untuk menghilangkan kata **"KOORD: "** dan hanya mengambil isinya  
+: `snprintf(output_buffer, buf_size, "Tujuan Mas Amba: %s\n", fragment);` mengganti format titik koordinatnya
 
-// Readdir
-static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-                       off_t offset, struct fuse_file_info *fi,
-                       enum fuse_readdir_flags flags) {
-    (void) offset;
-    (void) fi;
-    (void) flags;
-
-    char fpath[4096];
-    if (strcmp(path, "/") == 0) {
-        snprintf(fpath, sizeof(fpath), "%s", source_dir);
-    } else {
-        snprintf(fpath, sizeof(fpath), "%s%s", source_dir, path);
-    }
-
-    DIR *dp = opendir(fpath);
-    if (dp == NULL) return -errno;
-
-    struct dirent *de;
-    while ((de = readdir(dp)) != NULL) {
-        struct stat st;
-        memset(&st, 0, sizeof(st));
-        st.st_ino = de->d_ino;
-        st.st_mode = de->d_type << 12;
-        if (filler(buf, de->d_name, &st, 0, 0)) break;
-    }
-    closedir(dp);
-
-    if (strcmp(path, "/") == 0) {
-        filler(buf, "tujuan.txt", NULL, 0, 0);
-    }
-
-    return 0;
-}
-
-// Open file virtual
-static int xmp_open(const char *path, struct fuse_file_info *fi) {
-    if (strcmp(path, "/tujuan.txt") == 0) {
-        return 0;
-    }
-
-    char fpath[4096];
-    snprintf(fpath, sizeof(fpath), "%s%s", source_dir, path);
-    int res = open(fpath, fi->flags);
-    if (res == -1) return -errno;
-
-    close(res);
-    return 0;
-}
-
-// Read
-static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
-                    struct fuse_file_info *fi) {
-    (void) fi;
+##### Fungsi `xmp_read`
+```
+static int xmp_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+    // ...
 
     if (strcmp(path, "/tujuan.txt") == 0) {
         char content[4096];
+
         generate_tujuan_content(content, sizeof(content));
         size_t len = strlen(content);
 
@@ -176,44 +150,9 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
         } else {
             size = 0;
         }
-        return size;
+        return size; 
     }
-
-    char fpath[4096];
-    snprintf(fpath, sizeof(fpath), "%s%s", source_dir, path);
-    int fd = open(fpath, O_RDONLY);
-    if (fd == -1) return -errno;
-
-    int res = pread(fd, buf, size, offset);
-    if (res == -1) res = -errno;
-
-    close(fd);
-    return res;
-}
-
-static struct fuse_operations xmp_oper = {
-    .getattr = xmp_getattr,
-    .readdir = xmp_readdir,
-    .open    = xmp_open,
-    .read    = xmp_read,
-};
-
-// Main Funct
-
-int main(int argc, char *argv[]) {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <source_dir> <mount_dir>\n", argv[0]);
-        return 1;
-    }
-
-    realpath(argv[1], source_dir);
-
-    char *fuse_argv[2];
-    fuse_argv[0] = argv[0];
-    fuse_argv[1] = argv[2];
-
-    return fuse_main(2, fuse_argv, &xmp_oper, NULL);
-}
+    
+    // kode passthrough...
 ```
-
-
+: ` generate_tujuan_content(content, sizeof(content)); size_t len = strlen(content);` untuk memanggil fungsi tersebut
