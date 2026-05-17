@@ -16,6 +16,11 @@ f. Saat `cat mnt/tujuan.txt`, menghasilkan output one liner dengan format **"Tuj
 ```
 sudo apt install libfuse3-dev fuse3
 ```
+#### Compile & Run file `kenz_rescue.c`
+```
+gcc kenz_rescue.c `pkg-config fuse3 --cflags --libs` -o kenz_rescue
+./kenz_rescue amba_files mnt
+```
 
 #### a. Mengambil `amba_files` dari *Flashdisk* yang telah diberikan
 Menggunakan `gdown` untuk men-*download* `amba_files` dari link google drive.  
