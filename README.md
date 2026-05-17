@@ -109,7 +109,8 @@ static int xmp_open(const char *path, struct fuse_file_info *fi) {
 : `snprintf(fpath, sizeof(fpath), "%s%s", source_dir, path);` sebagai jalur ke `1.txt` asli  di `amba_files`   
 : ` int res = pread(fd, buf, size, offset);...return res;` untuk membaca isi file asli dan membuatnya di `buf` untuk ditampilkan  
 **Output**  
-<img src="assets/soal_1/output4_d1.png" width="450">
+<img src="assets/soal_1/output4_d1.png" width="450">  
+<img src="assets/soal_1/output4_d2.png" width="450">
 
 #### e. Membuat file virtual `tujuan.txt`di mount directory. File harus muncul saat `ls mnt/`, ukurannya stabil saat di-*stat*, dan tidak memiliki file fisik di `amba_files`  
 ##### Fungsi `xmp_readdir`
