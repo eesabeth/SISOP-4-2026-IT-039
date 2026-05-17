@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
 : `char *fuse_argv[2]; ... fuse_argv[1] = argv[2];` untuk menyiapkan argumen fungsi **FUSE**  
 : `return fuse_main(2, fuse_argv, &xmp_oper, NULL);` untuk menjalankan **FUSE** di background
 
-##### Membuat Passthrough**
+##### Membuat Passthrough
 ```
 static int xmp_open(const char *path, struct fuse_file_info *fi) {
     ...
@@ -77,44 +77,17 @@ static int xmp_open(const char *path, struct fuse_file_info *fi) {
     if (dp == NULL) return -errno;
 
     struct dirent *de;
-    // Membaca isi direktori source satu per satu (1.txt, 2.txt, dst)
     while ((de = readdir(dp)) != NULL) {
         struct stat st;
         memset(&st, 0, sizeof(st));
         st.st_ino = de->d_ino;
         st.st_mode = de->d_type << 12;
         
-        // Memasukkan nama file asli ke layar terminal
         if (filler(buf, de->d_name, &st, 0, 0)) break;
     }
     closedir(dp);
-    // ...
 ```
 : ` while ((de = readdir(dp)) != NULL) {...st.st_mode = de->d_type << 12;` untuk membaca isi direktori source dari `1.txt` sampai `7.txt`  
-Docum:
-
-##### Fungsi `xmp_getattr`
-```
-static int xmp_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi) {
-    // ... 
-    
-    if (strcmp(path, "/tujuan.txt") == 0) {
-        stbuf->st_mode = S_IFREG | 0444;
-        stbuf->st_nlink = 1;
-
-        char content[4096];
-        generate_tujuan_content(content, sizeof(content));
-        stbuf->st_size = strlen(content);
-
-        stbuf->st_uid = getuid();
-        stbuf->st_gid = getgid();
-        return 0;
-    }
-    
-    // kode passthrough...
-```
-: `char content[4096]; ... stbuf->st_size = strlen(content);` untuk menghitung size `tujuan.txt` dan mengirimnya ke Linux  
-: Bagian kode ini berfungsi untuk memberikan `stat` file `tujuan.txt` seolah-olah file itu bukan virtual  
 Docum:
 
 #### d. Setelah `./kenz_rescue.c amba_files mnt`, hasil `cat mnt/1.txt` sama dengan `cat amba_files/1.txt` 
@@ -147,21 +120,18 @@ Docum:
 : untuk injeksi `ls`, memaksa file `tujuan.txt` ada di terminal saat di root folder  
 ##### Fungsi `xmp_getattr`
 ```
-// Jika sistem operasi menanyakan atribut (stat) dari /tujuan.txt
     if (strcmp(path, "/tujuan.txt") == 0) {
-        stbuf->st_mode = S_IFREG | 0444; // Set sebagai file regular, Read-Only
+        stbuf->st_mode = S_IFREG | 0444; 
         stbuf->st_nlink = 1;
 
-        // Bikin kontennya di memori SEKARANG JUGA untuk menghitung ukurannya
         char content[4096];
         generate_tujuan_content(content, sizeof(content)); 
-        
-        // Ukuran file stabil karena diambil dari panjang karakter hasil generate
+
         stbuf->st_size = strlen(content); 
 
         stbuf->st_uid = getuid();
         stbuf->st_gid = getgid();
-        return 0; // Berhasil, abaikan pencarian ke hardisk!
+        return 0;
     }
 ```
 : `char content[4096]; generate_tujuan_content(content, ... ; stbuf->st_size = strlen(content);` untuk membuat isi konten `stat` dan menghitung ukurannya  
@@ -175,19 +145,14 @@ void generate_tujuan_content(char *output_buffer, size_t buf_size) {
     char line[256];
 
     for (int i = 1; i <= 7; i++) {
-        // ... (kode membuka file 1 - 7) ...
             while (fgets(line, sizeof(line), f)) {
-                // Mencari fragmen
                 if (strncmp(line, "KOORD: ", 7) == 0) {
-                    line[strcspn(line, "\r\n")] = 0; // Menghapus enter (agar jadi one liner)
-                    // Menggabungkan sisa teks setelah kata "KOORD: "
+                    line[strcspn(line, "\r\n")] = 0; 
                     strncat(fragment, line + 7, sizeof(fragment) - strlen(fragment) - 1);
                     break; 
                 }
             }
-        // ... (tutup file) ...
     }
-    // FORMAT AKHIR: Membungkus fragmen dengan kalimat Mas Amba diakhiri \n
     snprintf(output_buffer, buf_size, "Tujuan Mas Amba: %s\n", fragment);
 }
 ```
