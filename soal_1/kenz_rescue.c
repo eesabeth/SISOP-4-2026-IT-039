@@ -18,6 +18,10 @@ char source_dir[1024];
     char line[256];
 
     // baca 1.txt - 7.txt
+    void generate_tujuan_content(char *output_buffer, size_t buf_size) {
+    char fragment[1024] = "";
+    char line[256];
+
     for (int i = 1; i <= 7; i++) {
         char filepath[4096];
         snprintf(filepath, sizeof(filepath), "%s/%d.txt", source_dir, i);
