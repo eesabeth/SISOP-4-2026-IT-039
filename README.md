@@ -27,7 +27,6 @@ gdown "https://drive.google.com/file/d/1nLXFhptDo2mnUlZsw8pTWyAVpV49W20U/view?us
 unzip amba_files.zip
 rm amba_files.zip
 ```
-Docum:
 
 Buat mount directory sebelum membuat `kenz_rescue.c`.
 ```
@@ -89,7 +88,7 @@ static int xmp_open(const char *path, struct fuse_file_info *fi) {
 ```
 : ` while ((de = readdir(dp)) != NULL) {...st.st_mode = de->d_type << 12;` untuk membaca isi direktori source dari `1.txt` sampai `7.txt`  
 **Output**  
-<img src="assets/soal_2/output4_ce.png" width="450">
+<img src="assets/soal_1/output4_ce.png" width="450">
 
 #### d. Setelah `./kenz_rescue.c amba_files mnt`, hasil `cat mnt/1.txt` sama dengan `cat amba_files/1.txt` 
 ##### Fungsi `generate_tujuan_content` (`cat` atau `stat`)
@@ -109,7 +108,8 @@ static int xmp_open(const char *path, struct fuse_file_info *fi) {
 ```
 : `snprintf(fpath, sizeof(fpath), "%s%s", source_dir, path);` sebagai jalur ke `1.txt` asli  di `amba_files`   
 : ` int res = pread(fd, buf, size, offset);...return res;` untuk membaca isi file asli dan membuatnya di `buf` untuk ditampilkan  
-Docum:  
+**Output**  
+<img src="assets/soal_1/output4_d1.png" width="450">
 
 #### e. Membuat file virtual `tujuan.txt`di mount directory. File harus muncul saat `ls mnt/`, ukurannya stabil saat di-*stat*, dan tidak memiliki file fisik di `amba_files`  
 ##### Fungsi `xmp_readdir`
@@ -137,7 +137,9 @@ Docum:
 ```
 : `char content[4096]; generate_tujuan_content(content, ... ; stbuf->st_size = strlen(content);` untuk membuat isi konten `stat` dan menghitung ukurannya  
 **Output**  
-<img src="assets/soal_2/output4_ce.png" width="450">
+<img src="assets/soal_1/output4_ce.png" width="450">
+
+<img src="assets/soal_1/output4_ef.png" width="450">
 
 #### f. Saat `cat mnt/tujuan.txt`, menghasilkan output one liner dengan format "Tujuan Mas Amba: <gabungan_fragmen>"
 ##### Fungsi `generate_tujuan_content`
@@ -161,5 +163,6 @@ void generate_tujuan_content(char *output_buffer, size_t buf_size) {
 : `while (fgets(line, sizeof(line), f)) {... break; }` untuk membuka file `1.txt` sampai `7.txt`, mencari fragmen **"KOORD: "**, menghapus enter, dan menggabungkan teksnya  
 : `snprintf(output_buffer, buf_size, "Tujuan Mas Amba: %s\n", fragment);` untuk menyatukan fragmen dengan format yang ada
 
-Docum:
+**Output**  
+<img src="assets/soal_1/output4_ef.png" width="450">
 
