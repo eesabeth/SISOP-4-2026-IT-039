@@ -72,19 +72,26 @@ static int xmp_open(const char *path, struct fuse_file_info *fi) {
 #### c. Saat `kenz_rescue.c` di-*mount*, ketujuh file `1.txt` sampai `7.txt` harus muncul mount directory sama persis dengan source  
 ##### Fungsi `xmp_readdir`
 ```
-static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler, ...) {
-    // kode passthrough ...
+// ...
+    DIR *dp = opendir(fpath); // Membuka direktori source (amba_files)
+    if (dp == NULL) return -errno;
 
-    if (strcmp(path, "/") == 0) {
-        filler(buf, "tujuan.txt", NULL, 0, 0);
+    struct dirent *de;
+    // Membaca isi direktori source satu per satu (1.txt, 2.txt, dst)
+    while ((de = readdir(dp)) != NULL) {
+        struct stat st;
+        memset(&st, 0, sizeof(st));
+        st.st_ino = de->d_ino;
+        st.st_mode = de->d_type << 12;
+        
+        // Memasukkan nama file asli ke layar terminal
+        if (filler(buf, de->d_name, &st, 0, 0)) break;
     }
-
-    return 0;
-}
+    closedir(dp);
+    // ...
 ```
-: `if (strcmp(path, "/") == 0) {
-        filler(buf, "tujuan.txt", NULL, 0, 0);
-    }` untuk memasukkan file `tujuan.txt` saat user melakukan `ls mnt/`
+: ` while ((de = readdir(dp)) != NULL) {...st.st_mode = de->d_type << 12;` untuk membaca isi direktori source dari `1.txt` sampai `7.txt`  
+Docum:
 
 ##### Fungsi `xmp_getattr`
 ```
@@ -107,52 +114,85 @@ static int xmp_getattr(const char *path, struct stat *stbuf, struct fuse_file_in
     // kode passthrough...
 ```
 : `char content[4096]; ... stbuf->st_size = strlen(content);` untuk menghitung size `tujuan.txt` dan mengirimnya ke Linux  
-: Bagian kode ini berfungsi untuk memberikan `stat` file `tujuan.txt` seolah-olah file itu bukan virtual
+: Bagian kode ini berfungsi untuk memberikan `stat` file `tujuan.txt` seolah-olah file itu bukan virtual  
+Docum:
 
 #### d. Setelah `./kenz_rescue.c amba_files mnt`, hasil `cat mnt/1.txt` sama dengan `cat amba_files/1.txt` 
 ##### Fungsi `generate_tujuan_content` (`cat` atau `stat`)
 ```
+// ... 
+    char fpath[4096];
+    snprintf(fpath, sizeof(fpath), "%s%s", source_dir, path);
+    
+    int fd = open(fpath, O_RDONLY); // Membuka file fisik
+    if (fd == -1) return -errno;
+
+    int res = pread(fd, buf, size, offset);
+    if (res == -1) res = -errno;
+
+    close(fd);
+    return res;
+```
+: `snprintf(fpath, sizeof(fpath), "%s%s", source_dir, path);` sebagai jalur ke `1.txt` asli  di `amba_files`   
+: ` int res = pread(fd, buf, size, offset);...return res;` untuk membaca isi file asli dan membuatnya di `buf` untuk ditampilkan  
+Docum:  
+
+#### e. Membuat file virtual `tujuan.txt`di mount directory. File harus muncul saat `ls mnt/`, ukurannya stabil saat di-*stat*, dan tidak memiliki file fisik di `amba_files`  
+##### Fungsi `xmp_readdir`
+```
+    if (strcmp(path, "/") == 0) {
+        filler(buf, "tujuan.txt", NULL, 0, 0);
+    }
+```
+: untuk injeksi `ls`, memaksa file `tujuan.txt` ada di terminal saat di root folder  
+##### Fungsi `xmp_getattr`
+```
+// Jika sistem operasi menanyakan atribut (stat) dari /tujuan.txt
+    if (strcmp(path, "/tujuan.txt") == 0) {
+        stbuf->st_mode = S_IFREG | 0444; // Set sebagai file regular, Read-Only
+        stbuf->st_nlink = 1;
+
+        // Bikin kontennya di memori SEKARANG JUGA untuk menghitung ukurannya
+        char content[4096];
+        generate_tujuan_content(content, sizeof(content)); 
+        
+        // Ukuran file stabil karena diambil dari panjang karakter hasil generate
+        stbuf->st_size = strlen(content); 
+
+        stbuf->st_uid = getuid();
+        stbuf->st_gid = getgid();
+        return 0; // Berhasil, abaikan pencarian ke hardisk!
+    }
+```
+: `char content[4096]; generate_tujuan_content(content, ... ; stbuf->st_size = strlen(content);` untuk membuat isi konten `stat` dan menghitung ukurannya  
+Docum:
+
+#### f. Saat `cat mnt/tujuan.txt`, menghasilkan output one liner dengan format "Tujuan Mas Amba: <gabungan_fragmen>"
+##### Fungsi `generate_tujuan_content`
+```
 void generate_tujuan_content(char *output_buffer, size_t buf_size) {
     char fragment[1024] = "";
-    // ...
+    char line[256];
+
     for (int i = 1; i <= 7; i++) {
+        // ... (kode membuka file 1 - 7) ...
             while (fgets(line, sizeof(line), f)) {
+                // Mencari fragmen
                 if (strncmp(line, "KOORD: ", 7) == 0) {
-                    line[strcspn(line, "\r\n")] = 0; // Hapus enter
+                    line[strcspn(line, "\r\n")] = 0; // Menghapus enter (agar jadi one liner)
+                    // Menggabungkan sisa teks setelah kata "KOORD: "
                     strncat(fragment, line + 7, sizeof(fragment) - strlen(fragment) - 1);
                     break; 
                 }
             }
+        // ... (tutup file) ...
     }
+    // FORMAT AKHIR: Membungkus fragmen dengan kalimat Mas Amba diakhiri \n
     snprintf(output_buffer, buf_size, "Tujuan Mas Amba: %s\n", fragment);
 }
 ```
-: `for (int i = 1; i <= 7; i++) { ... line[strcspn(line, "\r\n")] = 0;` sebagai looping membuka `1.txt` sampai `7.txt`, mencari kalimat **"KOORD: "**, dan menghilangkan enter  
-: `strncat(fragment, line + 7, sizeof(fragment) - strlen(fragment) - 1); break;` untuk menghilangkan kata **"KOORD: "** dan hanya mengambil isinya  
-: `snprintf(output_buffer, buf_size, "Tujuan Mas Amba: %s\n", fragment);` mengganti format titik koordinatnya
+: `while (fgets(line, sizeof(line), f)) {... break; }` untuk membuka file `1.txt` sampai `7.txt`, mencari fragmen **"KOORD: "**, menghapus enter, dan menggabungkan teksnya  
+: `snprintf(output_buffer, buf_size, "Tujuan Mas Amba: %s\n", fragment);` untuk menyatukan fragmen dengan format yang ada
 
-##### Fungsi `xmp_read`
-```
-static int xmp_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    // ...
+Docum:
 
-    if (strcmp(path, "/tujuan.txt") == 0) {
-        char content[4096];
-
-        generate_tujuan_content(content, sizeof(content));
-        size_t len = strlen(content);
-
-        if (offset < len) {
-            if (offset + size > len) {
-                size = len - offset;
-            }
-            memcpy(buf, content + offset, size);
-        } else {
-            size = 0;
-        }
-        return size; 
-    }
-    
-    // kode passthrough...
-```
-: ` generate_tujuan_content(content, sizeof(content)); size_t len = strlen(content);` untuk memanggil fungsi tersebut
