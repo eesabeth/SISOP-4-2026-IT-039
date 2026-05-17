@@ -88,7 +88,8 @@ static int xmp_open(const char *path, struct fuse_file_info *fi) {
     closedir(dp);
 ```
 : ` while ((de = readdir(dp)) != NULL) {...st.st_mode = de->d_type << 12;` untuk membaca isi direktori source dari `1.txt` sampai `7.txt`  
-Docum:
+**Output**  
+<img src="assets/soal_2/output4_ce.png" width="450">
 
 #### d. Setelah `./kenz_rescue.c amba_files mnt`, hasil `cat mnt/1.txt` sama dengan `cat amba_files/1.txt` 
 ##### Fungsi `generate_tujuan_content` (`cat` atau `stat`)
@@ -135,7 +136,8 @@ Docum:
     }
 ```
 : `char content[4096]; generate_tujuan_content(content, ... ; stbuf->st_size = strlen(content);` untuk membuat isi konten `stat` dan menghitung ukurannya  
-Docum:
+**Output**  
+<img src="assets/soal_2/output4_ce.png" width="450">
 
 #### f. Saat `cat mnt/tujuan.txt`, menghasilkan output one liner dengan format "Tujuan Mas Amba: <gabungan_fragmen>"
 ##### Fungsi `generate_tujuan_content`
